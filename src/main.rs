@@ -64,12 +64,12 @@ fn main() {
     match args.actions {
         Some(Action::Enc(enc_args)) => handle_encrypt(enc_args),
         Some(Action::Dec(dec_args)) => handle_decrypt(dec_args),
-        None => eprintln!("No action specified"),
+        None => eprintln!("需要提供 Action (enc/dec)\n请使用 --help 查看帮助信息"),
     }
 }
 
 fn handle_encrypt(enc_args: EncArgs) {
-    let output: String = enc_args.output.unwrap();
+    let output: String = enc_args.output.unwrap_or_else(|| "out".to_string());
     let buffer: Vec<u8> = if enc_args.text {
         let text: String = enc_args.input.expect("待加密文本不合法");
         let buffer: Vec<u8> = BASE64.encode(text).as_bytes().to_vec();
@@ -98,9 +98,15 @@ fn handle_encrypt(enc_args: EncArgs) {
 }
 
 fn handle_decrypt(dec_args: DecArgs) {
-    let output: String = dec_args.output.unwrap();
+    let output: String = dec_args.output.unwrap_or_else(|| "out".to_string());
     let (buffer, key) = if dec_args.text {
-        let input: String = dec_args.input.unwrap();
+        let input: String = match dec_args.input {
+            Some(input) => input,
+            None => {
+                eprintln!("输入不能为空");
+                exit(1);
+            }
+        };
         let parts: Vec<&str> = input.split_whitespace().collect();
         if parts.len() != 2 {
             eprintln!("输入格式不正确，应该包含密文和密钥");
@@ -111,7 +117,7 @@ fn handle_decrypt(dec_args: DecArgs) {
         println!("正在解密数据...");
         (buffer, key)
     } else {
-        let path: String = dec_args.input.expect("输出路径不合法");
+        let path: String = dec_args.input.expect("输入路径不合法");
         println!("正在读取文件：{path}...");
         let buffer: Vec<u8> = read_file(&path);
         println!("正在读取密钥：{path}.key...");
@@ -123,7 +129,8 @@ fn handle_decrypt(dec_args: DecArgs) {
     let result: Vec<u8> = decrypt(&buffer, &key);
 
     if dec_args.print {
-        let result_str: String = String::from_utf8(result).expect("解码失败");
+        let decoded: Vec<u8> = BASE64.decode(&result[..]).expect("解码失败");
+        let result_str: String = String::from_utf8(decoded).expect("转换为字符串失败");
         println!("解压完成！\n原文：{result_str:?}");
     } else {
         println!("正在保存文件...");
@@ -160,7 +167,7 @@ fn decrypt(buffer: &[u8], key: &[u8]) -> Vec<u8> {
     pbar.finish();
     println!("解密完成！正在解压...");
     let decompressed: Vec<u8> = decode_all(&result[..]).expect("解压失败");
-    BASE64.decode(&decompressed[..]).expect("解码失败")
+    decompressed
 }
 
 fn read_file(path: &str) -> Vec<u8> {
